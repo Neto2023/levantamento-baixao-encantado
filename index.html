@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Levantamento Baixão Encantado</title>
+<style>
+:root { color-scheme: light; --fg: #1c2b33; --muted: #5d6e78; --line: #dbe3e8; --accent: #0a4fc2; --ok: #0b7a4b; --err: #b3361e; }
+* { box-sizing: border-box; }
+body { margin: 0; background: #fff; color: var(--fg); font: 16px/1.5 system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif; }
+.wrap { max-width: 680px; margin: 0 auto; padding: 28px 16px 48px; }
+h1 { margin: 0 0 8px; font-size: 26px; line-height: 1.2; color: var(--accent); }
+.lead { margin: 0 0 8px; color: var(--muted); }
+h2 { margin: 30px 0 4px; font-size: 19px; color: var(--accent); }
+.sec-note { margin: 0 0 8px; font-size: 15px; color: var(--muted); }
+.q { padding: 12px 0; border-bottom: 1px solid var(--line); }
+.q > label, legend { display: block; padding: 0; margin-bottom: 4px; font-weight: 600; }
+fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+.hint { margin: 0 0 6px; font-size: 14px; color: var(--muted); }
+input[type=text], textarea { width: 100%; padding: 9px 10px; font: inherit; color: inherit; background: #fff; border: 1px solid #b9c6ce; border-radius: 6px; }
+textarea { min-height: 76px; resize: vertical; }
+.opts { display: flex; flex-wrap: wrap; gap: 16px; }
+.opts label { display: flex; align-items: center; gap: 6px; }
+.opts input { width: 18px; height: 18px; margin: 0; accent-color: var(--accent); }
+.oculto { position: absolute; left: -9999px; }
+button { padding: 11px 18px; font: inherit; font-weight: 600; color: #fff; background: var(--accent); border: 1px solid var(--accent); border-radius: 6px; cursor: pointer; }
+button.sec { color: var(--accent); background: #fff; }
+button:disabled { opacity: .6; cursor: wait; }
+.acoes { margin-top: 24px; }
+.msg { margin: 12px 0 0; font-weight: 600; }
+.msg.ok { color: var(--ok); } .msg.err { color: var(--err); }
+pre { max-height: 320px; overflow: auto; margin: 12px 0; padding: 10px; white-space: pre-wrap; overflow-wrap: anywhere; font: 14px/1.4 Consolas, monospace; background: #f6f8f9; border: 1px solid var(--line); border-radius: 6px; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+footer { margin-top: 28px; font-size: 13px; color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Levantamento Baixão Encantado</h1>
+  <p class="lead">Estas informações alimentam o site e o atendimento no WhatsApp, que só informa o que estiver aqui. Responda com as suas palavras e deixe em branco o que não existir. O que você escreve fica guardado neste aparelho até o envio.</p>
+
+  <form id="form" autocomplete="off" novalidate>
+    <h2>Quem está respondendo</h2>
+    <div class="q"><label for="q-responsavel">Seu nome</label><input type="text" id="q-responsavel"></div>
+    <div class="q"><label for="q-contato">Seu WhatsApp</label><input type="text" id="q-contato" inputmode="tel"></div>
+    <div id="perguntas"></div>
+    <div class="oculto" aria-hidden="true"><label for="site">Não preencha</label><input type="text" id="site" tabindex="-1"></div>
+    <div class="acoes"><button type="submit" id="enviar">Enviar respostas</button></div>
+    <p class="msg" id="msg" role="status" hidden></p>
+  </form>
+
+  <div id="planob" hidden>
+    <p>Copie o texto abaixo e envie pelo WhatsApp do Dr Abrahão.</p>
+    <pre id="texto"></pre>
+    <button class="sec" type="button" id="copiar">Copiar texto</button>
+    <p class="msg ok" id="copiado" aria-live="polite"></p>
+  </div>
+
+  <footer>Não informe senhas nem dados bancários neste levantamento.</footer>
+</div>
+<script>
+// Endereço do app da web do Google Apps Script (termina em /exec). Trocar aqui depois de implantar.
+var URL_APPS_SCRIPT = '';
+var TEMPO_LIMITE_MS = 20000;
+var CHAVE = 'levantamento-baixao';
+const SECOES = [
+  { titulo: "1. Funcionamento", nota: "", itens: [
+    { id: "horarios", p: "Dias/horários", d: "Encontramos quinta a domingo, das 9h às 19h. Está certo?", t: "area" },
+    { id: "feriados", p: "Feriados e férias", d: "Abre em feriados? Muda algo em janeiro e julho?", t: "area" },
+    { id: "reservar", p: "Precisa reservar?", d: "Ou é só chegar? Precisa avisar antes?" },
+    { id: "capacidade", p: "Capacidade/dia" },
+    { id: "estacionamento", p: "Estacionamento", d: "É pago? Quantas vagas? Cabe ônibus?" }
+  ]},
+  { titulo: "2. Preços", nota: "", itens: [
+    { id: "entrada", p: "Entrada", d: "Valor por pessoa. Muda em datas especiais ou dias de show?", t: "area" },
+    { id: "crianca", p: "Criança grátis até", d: "Até que idade não paga? Quanto paga depois?" },
+    { id: "meia", p: "Meia/desconto", d: "Idosos, PCD, estudantes, grupos.", t: "area" },
+    { id: "pagamento", p: "Formas de pagamento", d: "Pix, cartão, dinheiro. Como funciona na portaria e no consumo? Vende antecipado?", t: "area" }
+  ]},
+  { titulo: "3. O que tem pra fazer", nota: "", itens: [
+    { id: "atracoes", p: "Atrações", d: "Liste tudo o que funciona hoje: toboáguas, piscinas, tirolesa, cascata e o que mais houver.", t: "area" },
+    { id: "incluso", p: "O que a entrada já inclui?", t: "area" },
+    { id: "servicos", p: "Produtos e serviços pagos à parte, com valores", d: "Tirolesa, armário, boia, colete, aluguel de itens, fotos.", t: "area" },
+    { id: "limites", p: "Idade, altura ou peso mínimos por atração", t: "area" },
+    { id: "obras", p: "O que está em obra ou chega em breve?", d: "O site não anuncia o que ainda não funciona.", t: "area" }
+  ]},
+  { titulo: "4. Cardápio", nota: "Pode enviar o cardápio com os preços, em foto ou arquivo, pelo WhatsApp do Dr Abrahão.", itens: [
+    { id: "pratos", p: "Pratos/carro-chefe", d: "Com preço e quantas pessoas serve.", t: "area" },
+    { id: "bebidas", p: "Bebidas", d: "Com preço.", t: "area" },
+    { id: "cozinha", p: "Como funciona / comida de fora", d: "Horário da cozinha, comanda, cooler, churrasco, garrafa de vidro.", t: "area" }
+  ]},
+  { titulo: "5. Espaços & locações", nota: "", itens: [
+    { id: "espacos", p: "Espaços e valores", d: "Quiosques, mesas, áreas cobertas, salão. Quanto custa e o que inclui?", t: "area" },
+    { id: "parque_inteiro", p: "Aluga o parque inteiro?", d: "Valor, dias e capacidade.", t: "area" }
+  ]},
+  { titulo: "6. Eventos", nota: "", itens: [
+    { id: "eventos", p: "Eventos", d: "Aniversário, casamento, confraternização, show. Capacidade e o que está incluso.", t: "area" },
+    { id: "orcamento", p: "Orçamento / sinal", d: "Como pedir, antecedência, valor do sinal e cancelamento.", t: "area" }
+  ]},
+  { titulo: "7. Excursões", nota: "", itens: [
+    { id: "excursoes", p: "Excursões e escolas", d: "Valor por pessoa, número mínimo, o que inclui, professores e motoristas pagam?", t: "area" },
+    { id: "excursoes_agenda", p: "Como agendar uma excursão?", d: "Antecedência, dias aceitos, sinal e quem atende.", t: "area" }
+  ]},
+  { titulo: "8. Cotas, sócios e associados", nota: "", itens: [
+    { id: "cotas", p: "Planos e valores", d: "Quais cotas ou planos existem, valor, mensalidade e duração.", t: "area" },
+    { id: "cotas_beneficios", p: "O que o sócio ganha?", d: "Dias de uso, descontos, convidados, dependentes.", t: "area" },
+    { id: "cotas_regras", p: "Regras e como aderir", d: "Contrato, carteirinha, transferência, atraso, quem atende.", t: "area" }
+  ]},
+  { titulo: "9. Regras", nota: "", itens: [
+    { id: "animais", p: "Animais", t: "op", o: ["Sim", "Não"] },
+    { id: "bebida_fora", p: "Bebida de fora", t: "op", o: ["Sim", "Não"] },
+    { id: "som", p: "Som próprio", t: "op", o: ["Sim", "Não"] },
+    { id: "menor", p: "Menor desacompanhado", t: "op", o: ["Sim", "Não"] },
+    { id: "acessivel", p: "Acessível", t: "op", o: ["Sim", "Não"] },
+    { id: "pernoite", p: "Pernoite", t: "op", o: ["Sim", "Não"] },
+    { id: "regras_extra", p: "Outras regras e segurança", d: "Roupas, salva-vidas, primeiros socorros, chuva.", t: "area" }
+  ]},
+  { titulo: "10. Como chegar", nota: "", itens: [
+    { id: "localizacao", p: "Localização", d: "Endereço e referência. No Google Maps aparece 5R3H+XP, Grajaú/MA.", t: "area" },
+    { id: "estrada", p: "Estrada/carro comum", d: "Carro comum e ônibus chegam? Tem trecho de terra?" }
+  ]},
+  { titulo: "11. FAQ", nota: "", itens: [
+    { id: "faq", p: "Perguntas frequentes", d: "Escreva a pergunta e a resposta que costuma dar.", t: "area" },
+    { id: "humano", p: "Quando precisa humano", d: "O que o atendimento automático deve passar para a equipe, e para quem.", t: "area" }
+  ]}
+];
+
+var $ = function (id) { return document.getElementById(id); };
+var respostas = {};
+try { respostas = JSON.parse(localStorage.getItem(CHAVE) || '{}'); } catch (e) {}
+function guardar() { try { localStorage.setItem(CHAVE, JSON.stringify(respostas)); } catch (e) {} }
+
+function alterar(id, valor) { respostas[id] = valor; guardar(); }
+
+function ligar(id, c) {
+  c.value = respostas[id] || '';
+  c.addEventListener('input', function () { alterar(id, c.value); });
+}
+
+function campo(i) {
+  var box = document.createElement('div'); box.className = 'q';
+  function dica() { var p = document.createElement('p'); p.className = 'hint'; p.textContent = i.d; return p; }
+  if (i.t === 'op') {
+    var fs = document.createElement('fieldset');
+    var lg = document.createElement('legend'); lg.textContent = i.p; fs.appendChild(lg);
+    if (i.d) fs.appendChild(dica());
+    var opts = document.createElement('div'); opts.className = 'opts';
+    i.o.forEach(function (texto) {
+      var l = document.createElement('label');
+      var r = document.createElement('input'); r.type = 'radio'; r.name = i.id; r.value = texto;
+      r.checked = respostas[i.id] === texto;
+      r.addEventListener('click', function () {
+        if (respostas[i.id] === texto) { r.checked = false; alterar(i.id, ''); } else alterar(i.id, texto);
+      });
+      l.appendChild(r); l.appendChild(document.createTextNode(texto)); opts.appendChild(l);
+    });
+    fs.appendChild(opts); box.appendChild(fs);
+  } else {
+    var l = document.createElement('label'); l.htmlFor = 'q-' + i.id; l.textContent = i.p; box.appendChild(l);
+    if (i.d) box.appendChild(dica());
+    var c = document.createElement(i.t === 'area' ? 'textarea' : 'input');
+    if (i.t !== 'area') c.type = 'text';
+    c.id = 'q-' + i.id;
+    ligar(i.id, c);
+    box.appendChild(c);
+  }
+  return box;
+}
+
+SECOES.forEach(function (s) {
+  var h = document.createElement('h2'); h.textContent = s.titulo; $('perguntas').appendChild(h);
+  if (s.nota) { var n = document.createElement('p'); n.className = 'sec-note'; n.textContent = s.nota; $('perguntas').appendChild(n); }
+  s.itens.forEach(function (i) { $('perguntas').appendChild(campo(i)); });
+});
+ligar('responsavel', $('q-responsavel'));
+ligar('contato', $('q-contato'));
+
+function textoFinal() {
+  var corpo = SECOES.map(function (s) {
+    return '*' + s.titulo.toUpperCase() + '*\n' + s.itens.map(function (i) { return '• ' + i.p + ': ' + (respostas[i.id] || '').trim(); }).join('\n');
+  }).join('\n\n');
+  return '*LEVANTAMENTO — BAIXÃO ENCANTADO*\nRespondido por: ' + (respostas.responsavel || '').trim() + '\n\n' + corpo;
+}
+
+function mensagem(t, classe) { var m = $('msg'); m.textContent = t; m.className = 'msg ' + classe; m.hidden = false; }
+
+function enviar() {
+  if (!/^https:\/\//.test(URL_APPS_SCRIPT)) return Promise.reject(new Error('sem endereço'));
+  var limite = new Promise(function (_, rej) { setTimeout(function () { rej(new Error('tempo esgotado')); }, TEMPO_LIMITE_MS); });
+  // text/plain evita a pré-checagem de CORS, que o Apps Script não atende
+  var envio = fetch(URL_APPS_SCRIPT, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify(Object.assign({}, respostas, { site: $('site').value }))
+  }).then(function (r) { return r.json(); });
+  return Promise.race([envio, limite]);
+}
+
+$('form').addEventListener('submit', function (ev) {
+  ev.preventDefault();
+  if (!(respostas.responsavel || '').trim()) {
+    mensagem('Falta preencher o seu nome, no início da página.', 'err');
+    $('q-responsavel').focus();
+    return;
+  }
+  $('enviar').disabled = true;
+  $('planob').hidden = true;
+  mensagem('Enviando...', '');
+  enviar().then(function (r) {
+    if (r && r.ok) mensagem('Respostas recebidas. Avise o Dr Abrahão. Se precisar corrigir algo, altere e envie de novo.', 'ok');
+    else throw new Error((r && r.erro) || 'falha');
+  }).catch(function () {
+    mensagem('Não foi possível enviar direto, mas nada se perdeu.', 'err');
+    $('texto').textContent = textoFinal();
+    $('copiado').textContent = '';
+    $('planob').hidden = false;
+  }).then(function () { $('enviar').disabled = false; });
+});
+
+$('copiar').addEventListener('click', function () {
+  function selecionar() {
+    var r = document.createRange(); r.selectNodeContents($('texto'));
+    var s = getSelection(); s.removeAllRanges(); s.addRange(r);
+    $('copiado').textContent = 'Texto selecionado. Use a opção copiar do seu aparelho.';
+  }
+  try {
+    navigator.clipboard.writeText($('texto').textContent).then(function () { $('copiado').textContent = 'Copiado.'; }, selecionar);
+  } catch (e) { selecionar(); }
+});
+</script>
+</body>
+</html>
