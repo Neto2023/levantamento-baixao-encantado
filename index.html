@@ -6,15 +6,27 @@
 <meta name="robots" content="noindex">
 <title>Levantamento Baixão Encantado</title>
 <style>
-:root { color-scheme: light; --fg: #1c2b33; --muted: #5d6e78; --line: #dbe3e8; --accent: #0a4fc2; --ok: #0b7a4b; --err: #b3361e; }
+/* Cores das pistas do toboágua e do logo do parque. */
+:root { color-scheme: light; --fg: #1c2b33; --muted: #5d6e78; --line: #cfe0ea; --accent: #0a4fc2; --azul: #0a4fc2; --verde: #1f9d3a; --amarelo: #ffc61a; --vermelho: #e0352b; --ok: #0b7a4b; --err: #b3361e; --pistas: linear-gradient(90deg, var(--azul) 0 25%, var(--verde) 25% 50%, var(--amarelo) 50% 75%, var(--vermelho) 75%); }
 * { box-sizing: border-box; }
 body { margin: 0; background: #fff; color: var(--fg); font: 16px/1.5 system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif; }
-.wrap { max-width: 680px; margin: 0 auto; padding: 28px 16px 48px; }
+.wrap { max-width: 680px; margin: 0 auto; padding: 16px 12px 36px; }
+.moldura { overflow: hidden; background: #fff; border: 3px solid var(--azul); border-radius: 16px; }
+.pistas { height: 8px; background: var(--pistas); }
+.capa { display: block; width: 100%; height: auto; }
+.miolo { padding: 18px 14px 22px; }
 h1 { margin: 0 0 8px; font-size: 26px; line-height: 1.2; color: var(--accent); }
 .lead { margin: 0 0 8px; color: var(--muted); }
-h2 { margin: 30px 0 4px; font-size: 19px; color: var(--accent); }
-.sec-note { margin: 0 0 8px; font-size: 15px; color: var(--muted); }
+.secao { margin-top: 20px; overflow: hidden; border: 2px solid var(--cor, var(--azul)); border-radius: 12px; }
+.secao:nth-of-type(4n+2) { --cor: var(--verde); }
+.secao:nth-of-type(4n+3) { --cor: #d9a400; }
+.secao:nth-of-type(4n+4) { --cor: var(--vermelho); }
+h2 { margin: 0; padding: 9px 14px; font-size: 18px; color: #fff; background: var(--cor, var(--azul)); }
+.secao:nth-of-type(4n+3) h2 { color: #2b2100; background: var(--amarelo); }
+.corpo { padding: 2px 14px 6px; }
+.sec-note { margin: 10px 0 2px; font-size: 15px; color: var(--muted); }
 .q { padding: 12px 0; border-bottom: 1px solid var(--line); }
+.corpo .q:last-child { border-bottom: 0; }
 .q > label, legend { display: block; padding: 0; margin-bottom: 4px; font-weight: 600; }
 fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
 .hint { margin: 0 0 6px; font-size: 14px; color: var(--muted); }
@@ -37,14 +49,23 @@ footer { margin-top: 28px; font-size: 13px; color: var(--muted); }
 </head>
 <body>
 <div class="wrap">
+<div class="moldura">
+<img class="capa" src="assets/logo-baixao.jpg" width="1000" height="370" alt="Logo do Baixão Encantado Parque Aquático">
+<div class="pistas" aria-hidden="true"></div>
+<div class="miolo">
   <h1>Levantamento Baixão Encantado</h1>
   <p class="lead">Estas informações alimentam o site e o atendimento no WhatsApp, que só informa o que estiver aqui. Responda com as suas palavras e deixe em branco o que não existir. O que você escreve fica guardado neste aparelho até o envio.</p>
 
   <form id="form" autocomplete="off" novalidate>
-    <h2>Quem está respondendo</h2>
-    <div class="q"><label for="q-responsavel">Seu nome</label><input type="text" id="q-responsavel"></div>
-    <div class="q"><label for="q-contato">Seu WhatsApp</label><input type="text" id="q-contato" inputmode="tel"></div>
-    <div id="perguntas"></div>
+    <div id="perguntas">
+      <section class="secao">
+        <h2>Quem está respondendo</h2>
+        <div class="corpo">
+          <div class="q"><label for="q-responsavel">Seu nome</label><input type="text" id="q-responsavel"></div>
+          <div class="q"><label for="q-contato">Seu WhatsApp</label><input type="text" id="q-contato" inputmode="tel"></div>
+        </div>
+      </section>
+    </div>
     <div class="oculto" aria-hidden="true"><label for="site">Não preencha</label><input type="text" id="site" tabindex="-1"></div>
     <div class="acoes"><button type="submit" id="enviar">Enviar respostas</button></div>
     <p class="msg" id="msg" role="status" hidden></p>
@@ -58,6 +79,9 @@ footer { margin-top: 28px; font-size: 13px; color: var(--muted); }
   </div>
 
   <footer>Não informe senhas nem dados bancários neste levantamento.</footer>
+</div>
+<div class="pistas" aria-hidden="true"></div>
+</div>
 </div>
 <script>
 // Endereço do app da web do Google Apps Script (termina em /exec). Trocar aqui depois de implantar.
@@ -169,9 +193,13 @@ function campo(i) {
 }
 
 SECOES.forEach(function (s) {
-  var h = document.createElement('h2'); h.textContent = s.titulo; $('perguntas').appendChild(h);
-  if (s.nota) { var n = document.createElement('p'); n.className = 'sec-note'; n.textContent = s.nota; $('perguntas').appendChild(n); }
-  s.itens.forEach(function (i) { $('perguntas').appendChild(campo(i)); });
+  var sec = document.createElement('section'); sec.className = 'secao';
+  var h = document.createElement('h2'); h.textContent = s.titulo; sec.appendChild(h);
+  var corpo = document.createElement('div'); corpo.className = 'corpo';
+  if (s.nota) { var n = document.createElement('p'); n.className = 'sec-note'; n.textContent = s.nota; corpo.appendChild(n); }
+  s.itens.forEach(function (i) { corpo.appendChild(campo(i)); });
+  sec.appendChild(corpo);
+  $('perguntas').appendChild(sec);
 });
 ligar('responsavel', $('q-responsavel'));
 ligar('contato', $('q-contato'));
